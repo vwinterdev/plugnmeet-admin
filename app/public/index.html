@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Уроки</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --text:#1d2330; --muted:#6b7385; --accent:#2f6fed; --danger:#d64545; --line:#e3e6ec; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.4 system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:760px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row.between { justify-content:space-between; }
+  input { flex:1; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; min-width:0; }
+  button { padding:8px 12px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  button.plus { width:34px; height:34px; padding:0; font-size:20px; line-height:1; }
+  button.danger { color:var(--danger); }
+  h2 { font-size:17px; margin:0; }
+  ul { list-style:none; padding:0; margin:12px 0 0; }
+  li { display:flex; gap:8px; align-items:center; padding:8px 0; border-top:1px solid var(--line); }
+  li .name { flex:1; }
+  .muted { color:var(--muted); }
+  .add { margin-top:12px; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1d2330; color:#fff; padding:8px 14px; border-radius:8px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Уроки</h1>
+  <form class="card row" id="newLesson">
+    <input id="lessonTitle" placeholder="Название урока, например «Математика 7Б»" maxlength="100" required>
+    <button>Создать урок</button>
+  </form>
+  <div id="lessons"></div>
+</main>
+<div id="toast"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const el = (tag, props = {}, ...kids) => {
+  const n = Object.assign(document.createElement(tag), props);
+  n.append(...kids);
+  return n;
+};
+
+function toast(text) {
+  const t = $('#toast');
+  t.textContent = text;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+async function api(path, method = 'GET', body) {
+  const res = await fetch('/api/lessons' + path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
+}
+
+async function copy(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = el('textarea', { value: text });
+    document.body.append(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  toast('Ссылка скопирована');
+}
+
+function renderLesson(lesson) {
+  const list = el('ul');
+  for (const s of lesson.students) {
+    list.append(el('li', {},
+      el('span', { className: 'name' }, s.name),
+      el('button', { className: 'ghost', onclick: () => copy(s.link) }, 'Копировать ссылку'),
+      el('button', { className: 'ghost danger', title: 'Удалить', onclick: async () => {
+        await api(`/${lesson.id}/students/${s.id}`, 'DELETE'); load();
+      } }, '×'),
+    ));
+  }
+  if (!lesson.students.length) list.append(el('li', { className: 'muted' }, 'Учеников пока нет'));
+
+  const nameInput = el('input', { placeholder: 'Имя ученика', maxLength: 60, required: true });
+  const addForm = el('form', { className: 'row add', onsubmit: async (e) => {
+    e.preventDefault();
+    const updated = await api(`/${lesson.id}/students`, 'POST', { name: nameInput.value });
+    const added = updated.students[updated.students.length - 1];
+    await copy(added.link);
+    load();
+  } }, nameInput, el('button', { className: 'plus', title: 'Добавить ученика' }, '+'));
+
+  return el('section', { className: 'card' },
+    el('div', { className: 'row between' },
+      el('h2', {}, lesson.title),
+      el('div', { className: 'row' },
+        el('a', { href: `/enter/${lesson.id}`, target: '_blank' }, el('button', { type: 'button' }, 'Начать урок')),
+        el('button', { className: 'ghost danger', onclick: async () => {
+          if (confirm(`Удалить урок «${lesson.title}»?`)) { await api(`/${lesson.id}`, 'DELETE'); load(); }
+        } }, 'Удалить'),
+      ),
+    ),
+    list,
+    addForm,
+  );
+}
+
+async function load() {
+  const lessons = await api('');
+  const box = $('#lessons');
+  box.replaceChildren(...lessons.map(renderLesson));
+  if (!lessons.length) box.append(el('p', { className: 'muted' }, 'Создайте первый урок.'));
+}
+
+$('#newLesson').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await api('', 'POST', { title: $('#lessonTitle').value });
+  $('#lessonTitle').value = '';
+  load();
+});
+
+load().catch((e) => toast(e.message));
+</script>
+</body>
+</html>
