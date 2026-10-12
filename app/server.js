@@ -12,6 +12,7 @@ const API_SECRET = process.env.PLUGNMEET_API_SECRET || '';
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 const TEACHER_NAME = process.env.TEACHER_NAME || 'Преподаватель';
 const DATA_FILE = process.env.DATA_FILE || '/data/lessons.json';
+const DIST_DIR = path.join(__dirname, 'dist');
 
 if (!PNM_URL || !API_KEY || !API_SECRET) {
   console.error('Нужны PLUGNMEET_URL, PLUGNMEET_API_KEY и PLUGNMEET_API_SECRET');
@@ -118,10 +119,15 @@ async function joinUrl(lesson, user) {
 
 // ---------- HTTP ----------
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css' };
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.svg': 'image/svg+xml',
+};
 
 function send(res, status, body, headers = {}) {
-  const isObj = typeof body === 'object' && body !== null;
+  const isObj = typeof body === 'object' && body !== null && !Buffer.isBuffer(body);
   res.writeHead(status, {
     'Content-Type': isObj ? 'application/json' : 'text/plain; charset=utf-8',
     ...headers,
@@ -231,8 +237,8 @@ async function handle(req, res) {
   // статика админки
   if (method === 'GET') {
     const file = parts.length ? parts.join('/') : 'index.html';
-    const full = path.join(__dirname, 'public', path.normalize(file));
-    if (full.startsWith(path.join(__dirname, 'public')) && fs.existsSync(full) && fs.statSync(full).isFile()) {
+    const full = path.join(DIST_DIR, path.normalize(file));
+    if (full.startsWith(DIST_DIR) && fs.existsSync(full) && fs.statSync(full).isFile()) {
       return send(res, 200, fs.readFileSync(full), { 'Content-Type': MIME[path.extname(full)] || 'application/octet-stream' });
     }
   }
